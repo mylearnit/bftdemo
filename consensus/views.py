@@ -13,8 +13,7 @@ from django.db.models import Count
 
 
 NODE_ADDR = os.environ.get("NODE_ADDR") or "http://127.0.0.1:8000"
-PEERS = [p for p in os.environ.get("PEERS", "").split(",") if p]
-ALL_NODES = [NODE_ADDR] + PEERS
+ALL_NODES = [p for p in os.environ.get("ALL_NODES", "").split(",") if p]
 
 def n_f():
     n = len(ALL_NODES)
