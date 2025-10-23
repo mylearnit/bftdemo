@@ -224,9 +224,43 @@ def block_receive(request):
     if tip_hash is None and prev_hash not in (None, "", "null"):
         # new node starting but expects genesis; accept only if prev_hash empty
         return JsonResponse({"err": "missing genesis or prev_hash mismatch", "local_tip_index": tip_index, "local_tip_hash": tip_hash}, status=409)
+    
+    
     if tip_hash is not None and prev_hash != tip_hash:
-        # chain divergence: request chain sync (simple approach: tell caller)
-        return JsonResponse({"err": "prev_hash mismatch", "expected_prev_hash": tip_hash, "got_prev_hash": prev_hash}, status=409)
+        # try auto chain sync
+        for peer in ALL_NODES:
+            if peer == NODE_ADDR:
+                continue
+            try:
+                resp = requests.get(f"{peer}/blocks", timeout=3)
+                peer_chain = resp.json().get("chain", [])
+                # find last common block
+                local_blocks = list(Block.objects.order_by("index").values())
+                local_hashes = {b["block_hash"]: b for b in local_blocks}
+                new_blocks = []
+                for b in peer_chain:
+                    if b["block_hash"] not in local_hashes:
+                        new_blocks.append(b)
+                # append missing blocks
+                for b in new_blocks:
+                    Block.objects.get_or_create(
+                        index=b["index"],
+                        defaults={
+                            "value": b["value"],
+                            "prev_hash": b["prev_hash"],
+                            "proposer": b["proposer"],
+                            "signature": b["signature"],
+                            "block_hash": b["block_hash"],
+                        },
+                    )
+                return JsonResponse({"status": "chain synced", "added": len(new_blocks)})
+            except Exception:
+                pass
+        return JsonResponse({"err": "chain divergence, sync failed"}, status=409)
+
+    # if tip_hash is not None and prev_hash != tip_hash:
+    #     # chain divergence: request chain sync (simple approach: tell caller)
+    #     return JsonResponse({"err": "prev_hash mismatch", "expected_prev_hash": tip_hash, "got_prev_hash": prev_hash}, status=409)
 
     # append to DB atomically (guard against duplicates)
     with transaction.atomic():
@@ -254,16 +288,22 @@ def broadcast_block(block_payload):
     # in commit(): after you create Decision, add this block creation step (pseudo-snippet)
     # replace your earlier Decision creation block with the following adjustments:
 
+
 def blocks_list(request):
-    blocks = Block.objects.all().order_by("index")
-    data = []
-    for b in blocks:
-        data.append({
-            "index": b.index,
-            "value": b.value,
-            "prev_hash": b.prev_hash,
-            "timestamp": b.timestamp.isoformat(),
-            "proposer": b.proposer,
-            "block_hash": b.block_hash,
-        })
-    return JsonResponse({"chain": data, "length": len(data)})
+    blocks = Block.objects.order_by("index").values()
+    return JsonResponse({"chain": list(blocks)})
+
+
+# def blocks_list(request):
+#     blocks = Block.objects.all().order_by("index")
+#     data = []
+#     for b in blocks:
+#         data.append({
+#             "index": b.index,
+#             "value": b.value,
+#             "prev_hash": b.prev_hash,
+#             "timestamp": b.timestamp.isoformat(),
+#             "proposer": b.proposer,
+#             "block_hash": b.block_hash,
+#         })
+#     return JsonResponse({"chain": data, "length": len(data)})
