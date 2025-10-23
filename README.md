@@ -10,8 +10,8 @@ Each node runs a Django instance. They agree on proposed values using a simplifi
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/YOURUSERNAME/django-bft-blockchain.git
-cd django-bft-blockchain
+git clone https://github.com/mylearnit/bftdemo.git
+cd bftdemo
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
